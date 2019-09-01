@@ -18,7 +18,8 @@ import javax.crypto.Cipher;
 
 public class FingerprintAuthModule extends ReactContextBaseJavaModule implements LifecycleEventListener {
 
-    private static final String FRAGMENT_TAG = "fingerprint_dialog";
+    private static final String FINGERPRINT_FRAGMENT_TAG = "fingerprint_dialog";
+    private static final String KEYGUARD_FRAGMENT_TAG = "keyguard_dialog";
 
     private KeyguardManager keyguardManager;
     private boolean isAppActive;
@@ -59,10 +60,7 @@ public class FingerprintAuthModule extends ReactContextBaseJavaModule implements
 
         int result = isFingerprintAuthAvailable();
         if (result == FingerprintAuthConstants.IS_SUPPORTED) {
-            // TODO: once this package supports Android's Face Unlock,
-            // implement a method to find out which type of biometry
-            // (not just fingerprint) is actually supported
-            reactSuccessCallback.invoke("Fingerprint");
+            reactSuccessCallback.invoke("Fingerprint is supported.");
         } else {
             reactErrorCallback.invoke("Not supported.", result);
         }
@@ -79,8 +77,17 @@ public class FingerprintAuthModule extends ReactContextBaseJavaModule implements
 
         int availableResult = isFingerprintAuthAvailable();
         if (availableResult != FingerprintAuthConstants.IS_SUPPORTED) {
-            inProgress = false;
-            reactErrorCallback.invoke("Not supported", availableResult);
+            // Allow passcode fallback when device cannot use fingerprint but gets PIN set up.
+            if (getKeyguardManager() != null && getKeyguardManager().isKeyguardSecure() &&
+            authConfig.hasKey("passcodeFallback") && authConfig.getBoolean("passcodeFallback") == true) {
+                final KeyguardResultHandler prh = new KeyguardResultHandler(reactErrorCallback, reactSuccessCallback);
+                final KeyguardDialog keyguardDialog = new KeyguardDialog();
+                keyguardDialog.show(activity.getFragmentManager(), KEYGUARD_FRAGMENT_TAG);
+                keyguardDialog.setDialogCallback(prh);
+            } else {
+                inProgress = false;
+                reactErrorCallback.invoke("Not supported", availableResult);
+            }
             return;
         }
 
@@ -110,7 +117,7 @@ public class FingerprintAuthModule extends ReactContextBaseJavaModule implements
             return;
         }
 
-        fingerprintDialog.show(activity.getFragmentManager(), FRAGMENT_TAG);
+        fingerprintDialog.show(activity.getFragmentManager(), FINGERPRINT_FRAGMENT_TAG);
     }
 
     private int isFingerprintAuthAvailable() {
